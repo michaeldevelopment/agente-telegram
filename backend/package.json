@@ -1,0 +1,29 @@
+{
+  "name": "agente-telegram-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/src/index.js",
+    "migrate": "tsx scripts/migrate.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "smoke:01": "bash scripts/smoke/01.sh"
+  },
+  "dependencies": {
+    "fastify": "^5.2.1",
+    "luxon": "^3.5.0",
+    "postgres": "^3.4.5",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/luxon": "^3.4.2",
+    "@types/node": "^22.10.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}
