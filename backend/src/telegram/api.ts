@@ -89,6 +89,15 @@ export function answerCallbackQuery(opts: {
   return call<boolean>("answerCallbackQuery", { ...opts });
 }
 
+/**
+ * "Escribiendo…". Dura ≤5 s en el cliente de Telegram: hay que reenviarlo
+ * cada ~4 s mientras el bot sigue trabajando, o el indicador desaparece y
+ * el silencio del buffer se siente como abandono.
+ */
+export function sendChatAction(chat_id: number, action = "typing"): Promise<boolean> {
+  return call<boolean>("sendChatAction", { chat_id, action });
+}
+
 export function getFile(file_id: string): Promise<{ file_path?: string }> {
   return call("getFile", { file_id });
 }

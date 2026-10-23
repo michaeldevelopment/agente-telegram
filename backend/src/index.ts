@@ -3,6 +3,7 @@ import { DateTime } from "luxon";
 import { env, reportarCapacidades } from "./config/env.js";
 import { closeDb, dbOk } from "./db/client.js";
 import { arrancarDrenado, pararDrenado } from "./egress/drain.js";
+import { registrarInternal } from "./http/internal.js";
 import { registrarWebhook } from "./ingress/webhook.js";
 
 const app = Fastify({
@@ -26,6 +27,7 @@ app.get("/health", async (_req, reply) => {
 });
 
 registrarWebhook(app);
+registrarInternal(app);
 
 async function main() {
   try {

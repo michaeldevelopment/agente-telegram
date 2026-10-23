@@ -3,7 +3,7 @@ import { enqueue } from "../egress/outbox.js";
 import { prepararTexto } from "../egress/format.js";
 import { callWithRetry, MODEL, SinSaldo } from "../llm/deepseek.js";
 import {
-  bloqueVolatil, buildMessages, getHistorial, getPromptEstatico,
+  bloqueVolatil, buildMessages, getHistorial, getPromptEstatico, VENTANA_MENSAJES,
 } from "../llm/messages.js";
 import { logEvent, logLlmCall } from "../obs/events.js";
 import type { Conversacion, Workspace } from "../ingress/persist.js";
@@ -21,17 +21,33 @@ export async function runAgent(
   ws: Workspace,
   conv: Conversacion,
   textoTurno: string,
+  opts: {
+    /**
+     * Cuántos de los mensajes más recientes de `messages` son el turno
+     * actual y hay que EXCLUIR del historial, porque ya van en `textoTurno`.
+     *
+     * Con un mensaje suelto es 1 (el default, de siempre). Desde el buffer
+     * (spec 06) un turno consolida varios mensajes del paciente en uno solo:
+     * ahí hay que excluir tantos como `msg_count` tenga el lote, o esos
+     * mismos mensajes aparecerían DOS veces — una en el historial, otra
+     * dentro del texto consolidado.
+     */
+    excluirUltimos?: number;
+  } = {},
 ): Promise<ResultadoTurno> {
+  const excluir = Math.max(0, opts.excluirUltimos ?? 1);
   try {
     const [promptEstatico, datos] = await Promise.all([
       getPromptEstatico(ws.id),
       datosDelPaciente(conv.contactId),
-      // El historial se pide después: tiene que incluir el turno actual, que
-      // el ingress ya guardó, así que se excluye explícitamente abajo.
+      // El historial se pide después: tiene que incluir el/los turno(s)
+      // actuales, que el ingress ya guardó, así que se excluyen abajo.
     ]);
 
-    // El turno actual ya está en `messages`; no puede ir dos veces.
-    const historial = (await getHistorial(conv.conversationId)).slice(0, -1);
+    // Se piden VENTANA_MENSAJES + excluir para que, tras recortar los del
+    // turno actual, sigan quedando hasta VENTANA_MENSAJES de historial real.
+    const crudo = await getHistorial(conv.conversationId, VENTANA_MENSAJES + excluir);
+    const historial = excluir > 0 ? crudo.slice(0, -excluir) : crudo;
 
     const mensajes = buildMessages({
       promptEstatico,

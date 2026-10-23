@@ -30,8 +30,12 @@ async function ultimasLlamadas(n: number): Promise<LlamadaLlm[]> {
 }
 
 async function main() {
-  const [ws] = await sql<{ id: string; slug: string; name: string; timezone: string }[]>`
-    select id, slug, name, timezone from workspaces limit 1`;
+  const [ws] = await sql<{
+    id: string; slug: string; name: string; timezone: string;
+    buffer_ms: number; buffer_max_ms: number; buffer_max_msgs: number;
+  }[]>`
+    select id, slug, name, timezone, buffer_ms, buffer_max_ms, buffer_max_msgs
+      from workspaces limit 1`;
   if (!ws) throw new Error("no hay workspace: corre npm run seed");
 
   await limpiar();
@@ -46,6 +50,7 @@ async function main() {
   const contexto = {
     id: ws.id, slug: ws.slug, name: ws.name, timezone: ws.timezone,
     webhookSecret: null, webhookPath: null,
+    bufferMs: ws.buffer_ms, bufferMaxMs: ws.buffer_max_ms, bufferMaxMsgs: ws.buffer_max_msgs,
   };
   const conversacion = {
     contactId: c!.id, conversationId: conv!.id,

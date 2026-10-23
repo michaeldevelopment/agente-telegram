@@ -8,7 +8,30 @@ export type Workspace = {
   timezone: string;
   webhookSecret: string | null;
   webhookPath: string | null;
+  bufferMs: number;
+  bufferMaxMs: number;
+  bufferMaxMsgs: number;
 };
+
+type FilaWorkspace = {
+  id: string; slug: string; name: string; timezone: string;
+  webhook_secret: string | null; webhook_path: string | null;
+  buffer_ms: number; buffer_max_ms: number; buffer_max_msgs: number;
+};
+
+function mapWorkspace(w: FilaWorkspace): Workspace {
+  return {
+    id: w.id,
+    slug: w.slug,
+    name: w.name,
+    timezone: w.timezone,
+    webhookSecret: w.webhook_secret,
+    webhookPath: w.webhook_path,
+    bufferMs: w.buffer_ms,
+    bufferMaxMs: w.buffer_max_ms,
+    bufferMaxMsgs: w.buffer_max_msgs,
+  };
+}
 
 export type Conversacion = {
   contactId: string;
@@ -41,26 +64,30 @@ export async function getWorkspace(slug: string): Promise<Workspace | null> {
   const cached = cacheWs.get(slug);
   if (cached && cached.hasta > Date.now()) return cached.ws;
 
-  const [w] = await sql<
-    { id: string; slug: string; name: string; timezone: string;
-      webhook_secret: string | null; webhook_path: string | null }[]
-  >`select id, slug, name, timezone, webhook_secret, webhook_path
+  const [w] = await sql<FilaWorkspace[]>`
+    select id, slug, name, timezone, webhook_secret, webhook_path,
+           buffer_ms, buffer_max_ms, buffer_max_msgs
       from workspaces where slug = ${slug} and is_active limit 1`;
 
-  const ws: Workspace | null = w
-    ? {
-        id: w.id,
-        slug: w.slug,
-        name: w.name,
-        timezone: w.timezone,
-        webhookSecret: w.webhook_secret,
-        webhookPath: w.webhook_path,
-      }
-    : null;
+  const ws: Workspace | null = w ? mapWorkspace(w) : null;
 
   // Los negativos se cachean menos: un slug mal escrito no debe quedar fijo un minuto.
   cacheWs.set(slug, { ws, hasta: Date.now() + (ws ? CACHE_MS : 5_000) });
   return ws;
+}
+
+/**
+ * Por id, SIN cache. La usa el endpoint interno de pg_cron (spec 06): el
+ * barrido corre cada 10 s y el volumen es bajo, así que una lectura fresca
+ * no cuesta nada y evita arrastrar una entrada de cache vieja al camino del
+ * cron, que es justo el que menos se puede permitir un dato desactualizado.
+ */
+export async function getWorkspaceById(id: string): Promise<Workspace | null> {
+  const [w] = await sql<FilaWorkspace[]>`
+    select id, slug, name, timezone, webhook_secret, webhook_path,
+           buffer_ms, buffer_max_ms, buffer_max_msgs
+      from workspaces where id = ${id} and is_active limit 1`;
+  return w ? mapWorkspace(w) : null;
 }
 
 /**

@@ -7,8 +7,7 @@ import {
   marcarBloqueado, upsertContactoYConversacion, type Workspace,
 } from "./persist.js";
 import { handleAyuda, handleStart } from "../handlers/start.js";
-import { runAgent } from "../agent/run.js";
-import { tieneEnv } from "../config/env.js";
+import { appendToBuffer } from "../runtime/buffer.js";
 import { TelegramError } from "../telegram/api.js";
 
 /** Comparación en tiempo constante. Longitudes distintas = no coincide. */
@@ -84,16 +83,17 @@ async function procesar(ws: Workspace, body: unknown): Promise<void> {
   const conv = await upsertContactoYConversacion(ws, ev);
 
   // Dedupe en base de datos, no en memoria.
-  const { isNew } = await insertInboundOnConflictDoNothing(ws, conv, ev);
+  const { isNew, id: messageId } = await insertInboundOnConflictDoNothing(ws, conv, ev);
   if (!isNew) return;
 
-  await rutear(ws, conv, ev);
+  await rutear(ws, conv, ev, messageId);
 }
 
 async function rutear(
   ws: Workspace,
   conv: Awaited<ReturnType<typeof upsertContactoYConversacion>>,
   ev: Inbound,
+  messageId: string | undefined,
 ): Promise<void> {
   try {
     // El usuario bloqueó el bot (o lo desbloqueó).
@@ -109,26 +109,31 @@ async function rutear(
     // Contra un chat bloqueado no se envía nada.
     if (conv.isBlocked) return;
 
+    // Comandos: deterministas, SIN LLM y SIN pasar por el buffer. El motor
+    // de decisión formal llega en la spec 07; esto ya cumple la regla 6
+    // ("botones, comandos y urgencias saltan el buffer") para comandos.
     switch (ev.command) {
       case "start": return await handleStart(ws, conv, ev);
       case "ayuda":
       case "help":  return await handleAyuda(ws, conv, ev);
     }
 
-    // Texto libre → el agente. El buffer y el motor de decisión llegan en
-    // las specs 06 y 07; por ahora cada mensaje es un turno.
-    if (ev.kind === "callback") return;      // los botones, en la spec 12
-    if (!ev.text?.trim()) return;            // foto o sticker sin texto
+    if (ev.kind === "callback") return; // los botones, en la spec 12
+    if (!ev.text?.trim()) return;       // foto o sticker sin texto, por ahora
 
-    if (!tieneEnv("DEEPSEEK_API_KEY")) {
+    if (!messageId) {
+      // No debería pasar: isNew=true siempre trae id. Defensivo nada más.
       await logEvent({
         workspaceId: ws.id, conversationId: conv.conversationId,
-        type: "llm_error", level: "warn",
-        payload: { motivo: "falta DEEPSEEK_API_KEY: el agente no puede responder" },
+        type: "ingress_error", level: "error",
+        payload: { motivo: "mensaje sin id tras insertarlo" },
       });
       return;
     }
-    await runAgent(ws, conv, ev.text);
+
+    // Texto libre → el buffer, no directo al agente. Agrupa por silencio
+    // (spec 06); el agente se llama al cerrar el lote, con todo consolidado.
+    await appendToBuffer(ws, conv, messageId, ev.chatId);
   } catch (e) {
     if (e instanceof TelegramError && e.esBloqueo) {
       await marcarBloqueado(ws, ev.chatId, true);

@@ -16,12 +16,14 @@
     "webhook": "tsx scripts/set-webhook.ts",
     "webhook:gen": "tsx scripts/set-webhook.ts --generate",
     "webhook:info": "tsx scripts/set-webhook.ts --info",
+    "runtime-config": "tsx scripts/sync-runtime-config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "smoke:01": "bash scripts/smoke/01.sh",
     "smoke:02": "bash scripts/smoke/02.sh",
     "smoke:03": "bash scripts/smoke/03.sh",
     "smoke:04": "bash scripts/smoke/04.sh",
-    "smoke:05": "bash scripts/smoke/05.sh"
+    "smoke:05": "bash scripts/smoke/05.sh",
+    "smoke:06": "bash scripts/smoke/06.sh"
   },
   "dependencies": {
     "dotenv": "^18.0.9",
