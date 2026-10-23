@@ -4,7 +4,7 @@
 #   bash scripts/smoke/01.sh              # contra localhost:3000
 #   BASE_URL=https://x.up.railway.app bash scripts/smoke/01.sh
 #
-# Necesita: curl, psql (o DATABASE_URL para que lo use el propio script)
+# Necesita: curl y node. Las consultas van por scripts/q.ts.
 
 set -uo pipefail
 cd "$(dirname "$0")/../.." || exit 1
@@ -17,7 +17,8 @@ ok()   { printf '  \033[32m✓\033[0m %s\n' "$1"; }
 bad()  { printf '  \033[31m✗\033[0m %s\n' "$1"; fail=1; }
 head() { printf '\n\033[1m%s\033[0m\n' "$1"; }
 
-q() { psql "$DATABASE_URL" -tAc "$1" 2>/dev/null | tr -d '[:space:]'; }
+# psql no está instalado en todas las máquinas; el helper usa el driver del proyecto.
+q() { printf '%s' "$1" | npx tsx scripts/q.ts 2>/dev/null | tr -d '[:space:]'; }
 
 head "1 · /health en $BASE_URL"
 body=$(curl -sS --max-time 10 "$BASE_URL/health" 2>/dev/null)
@@ -29,14 +30,16 @@ else
 fi
 
 head "2 · Las 16 tablas del esquema"
-tablas="runtime_config workspaces contacts conversations messages message_batches
-        business_info agent_prompts services business_hours closures appointments
-        reminders outbound_queue events handoff_relay"
-faltan=0
-for t in $tablas; do
-  [ "$(q "select to_regclass('public.$t') is not null")" = "t" ] || { bad "falta la tabla $t"; faltan=1; }
-done
-[ $faltan -eq 0 ] && ok "las 16 existen"
+# Una sola consulta: 16 llamadas seguidas agotan el pooler de Supabase y
+# devuelven falsos negativos ("falta la tabla X" cuando sí está).
+faltantes=$(q "
+  select coalesce(string_agg(t, ','), '') from unnest(array[
+    'runtime_config','workspaces','contacts','conversations','messages',
+    'message_batches','business_info','agent_prompts','services',
+    'business_hours','closures','appointments','reminders',
+    'outbound_queue','events','handoff_relay'
+  ]) as t where to_regclass('public.' || t) is null")
+[ -z "$faltantes" ] && ok "las 16 existen" || bad "faltan: $faltantes"
 
 head "3 · Los índices únicos que son garantías"
 for i in uq_messages_update uq_batch_open uq_appt_slot; do
@@ -53,11 +56,11 @@ n=$(q "select count(*) from pg_type where typname in
 [ "$n" = "8" ] && ok "los 8 existen" || bad "hay $n de 8 enums"
 
 head "5 · tg_chat_id es BIGINT, no int"
-for t in contacts outbound_queue; do
-  tipo=$(q "select data_type from information_schema.columns
-             where table_name='$t' and column_name='tg_chat_id'")
-  [ "$tipo" = "bigint" ] && ok "$t.tg_chat_id = bigint" || bad "$t.tg_chat_id es '$tipo'"
-done
+malos=$(q "
+  select coalesce(string_agg(table_name || '=' || data_type, ', '), '')
+    from information_schema.columns
+   where column_name = 'tg_chat_id' and data_type <> 'bigint'")
+[ -z "$malos" ] && ok "todas las columnas tg_chat_id son bigint" || bad "no son bigint: $malos"
 
 head "6 · Conexión por el pooler 6543"
 case "${DATABASE_URL:-}" in

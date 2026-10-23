@@ -1,0 +1,111 @@
+{
+  "negocio": {
+    "nombre": "Fabián González Odontología",
+    "nombre_alterno": "Clínica Odontológica Dr. Fabián González",
+    "tipo": "clínica odontológica",
+    "ciudad": "Cúcuta",
+    "departamento": "Norte de Santander",
+    "pais": "Colombia",
+    "zona_horaria": "America/Bogota",
+    "moneda": "COP"
+  },
+  "sedes": [
+    {
+      "nombre": "Sede principal",
+      "direccion": "Av 3A # 24, Santo Domingo, Cúcuta, Norte de Santander",
+      "coordenadas": "7.8737193, -72.5015457",
+      "maps": "https://maps.app.goo.gl/ — ver link completo en raw/2026-10-22-datos-cliente-dr-gonzalez.md",
+      "indicaciones": "Barrio Santo Domingo, sobre la Avenida 3A. #dato-ficticio: punto de referencia y parqueadero sin confirmar",
+      "telefono": "+57 322 236 3192",
+      "whatsapp": "+57 322 236 3192"
+    }
+  ],
+  "horario": {
+    "lunes_viernes": "8:00 a. m. – 6:00 p. m.",
+    "sabado": "8:00 a. m. – 12:00 m.",
+    "domingo": "cerrado",
+    "almuerzo": null,
+    "_nota_almuerzo": "El cliente NO mencionó descanso de almuerzo y dio el horario corrido 8-18. Se toma literal: jornada continua, sin break. Si la clínica cierra a mediodía hay que añadirlo a business_hours.break_from/break_to — reduce los slots que ofrece el agente."
+  },
+  "equipo": [
+    {
+      "nombre": "Dr. Fabián González",
+      "especialidad": "Odontología general y estética",
+      "_ficticio": ["especialidad"]
+    },
+    {
+      "nombre": "<<EDITAR>>",
+      "rol": "Se desconoce si hay más profesionales en la clínica",
+      "_nota": "No se inventan nombres de personas. Confirmar con el cliente."
+    }
+  ],
+  "pagos": {
+    "medios": [
+      "efectivo",
+      "tarjeta débito",
+      "tarjeta crédito",
+      "transferencia bancaria",
+      "Nequi",
+      "Daviplata"
+    ],
+    "financiacion": "Planes de pago en tratamientos de ortodoncia e implantes: cuota inicial más mensualidades. Con tarjeta de crédito se puede diferir a cuotas.",
+    "eps_prepagadas": "Atención particular. No se factura directamente a EPS; para medicina prepagada se entrega la factura para trámite de reembolso.",
+    "_ficticio": ["medios", "financiacion", "eps_prepagadas"]
+  },
+  "politicas": {
+    "cancelacion": "Avisar con al menos 24 horas de anticipación.",
+    "llegada_tarde": "Tolerancia de 15 minutos; después se reprograma la cita.",
+    "primera_cita": "Traer documento de identidad y radiografías previas si las tiene.",
+    "_ficticio": ["cancelacion", "llegada_tarde", "primera_cita"]
+  },
+  "faqs": [
+    {
+      "p": "¿La valoración tiene costo?",
+      "r": "No, la valoración es gratuita. En ella el doctor revisa tu caso y te dice qué necesitas y cuánto costaría."
+    },
+    {
+      "p": "¿Atienden niños?",
+      "r": "Sí, atendemos niños."
+    },
+    {
+      "p": "¿Manejan sedación?",
+      "r": "Sí, manejamos sedación. Si te preocupa el procedimiento, coméntalo en la valoración y el doctor te explica las opciones."
+    },
+    {
+      "p": "¿Cuánto dura un tratamiento de ortodoncia?",
+      "r": "Depende del caso; se define en la valoración. El rango típico es de 18 a 24 meses.",
+      "_ficticio": true
+    },
+    {
+      "p": "¿Atienden urgencias el mismo día?",
+      "r": "Sí, según disponibilidad de la agenda. Llámanos al +57 322 236 3192 y te damos el espacio más cercano.",
+      "_ficticio": true
+    },
+    {
+      "p": "¿Hacen carillas? ¿En cuántas citas?",
+      "r": "Sí. Normalmente se hacen en 2 o 3 citas, dependiendo del número de dientes y del material.",
+      "_ficticio": true
+    },
+    {
+      "p": "¿Tienen parqueadero?",
+      "r": "<<EDITAR>>"
+    }
+  ],
+  "_meta": {
+    "fuente_real": "raw/2026-10-22-datos-cliente-dr-gonzalez.md",
+    "fuente_estructura": "00-BLUEPRINT-agente-telegram.md §9.2",
+    "destino": "business_info.structured",
+    "confirmado_por_el_cliente": [
+      "telefono",
+      "whatsapp",
+      "direccion",
+      "horario lunes-viernes",
+      "horario sabado",
+      "valoracion gratuita",
+      "manejan sedacion",
+      "atienden niños"
+    ],
+    "ficticio_autorizado": "El usuario autorizó el 2026-10-22 rellenar con datos ficticios aproximados los campos no entregados. Todo lo marcado con #dato-ficticio o _ficticio es PLAUSIBLE PERO FALSO y debe sustituirse antes de producción.",
+    "nota_cache": "Al sustituir cualquier valor hay que regenerar business_info.rendered y su hash. Cambia el prefijo del prompt y se paga un cache miss la primera vez. Conviene hacerlo en bloque."
+  }
+}

@@ -11,12 +11,23 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/src/index.js",
     "migrate": "tsx scripts/migrate.ts",
+    "seed": "tsx scripts/seed.ts",
+    "kb:sync": "cp ../knowledge/wiki/Clinica-Gonzalez-business-info.json data/business-info.json && cp ../knowledge/wiki/Clinica-Gonzalez-services.csv data/services.csv && echo snapshot actualizado desde el vault",
+    "webhook": "tsx scripts/set-webhook.ts",
+    "webhook:gen": "tsx scripts/set-webhook.ts --generate",
+    "webhook:info": "tsx scripts/set-webhook.ts --info",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "smoke:01": "bash scripts/smoke/01.sh"
+    "smoke:01": "bash scripts/smoke/01.sh",
+    "smoke:02": "bash scripts/smoke/02.sh",
+    "smoke:03": "bash scripts/smoke/03.sh",
+    "smoke:04": "bash scripts/smoke/04.sh",
+    "smoke:05": "bash scripts/smoke/05.sh"
   },
   "dependencies": {
+    "dotenv": "^18.0.9",
     "fastify": "^5.2.1",
     "luxon": "^3.5.0",
+    "openai": "^7.43.0",
     "postgres": "^3.4.5",
     "zod": "^3.24.1"
   },

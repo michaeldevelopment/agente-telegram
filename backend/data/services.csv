@@ -1,0 +1,14 @@
+slug,name,duration_min,buffer_min,price_from,price_note,requires_eval,sort_order,is_active,ficticio
+valoracion,Valoración y diagnóstico,30,10,0,Gratuita,false,10,true,no
+limpieza-dental,Limpieza dental (profilaxis),45,10,120000,desde,false,20,true,precio
+blanqueamiento,Blanqueamiento dental,60,15,550000,desde; sujeto a valoración,true,30,true,precio
+resina,Resina / calza estética,45,10,160000,desde; por diente,true,40,true,precio
+carillas,Carillas dentales,90,15,450000,desde; por diente; en resina. Porcelana desde 1200000,true,50,true,precio+duracion
+ortodoncia-consulta,Consulta de ortodoncia,45,15,60000,desde,false,60,true,precio
+brackets-metalicos,Brackets metálicos (inicio),90,15,700000,desde; inicio + mensualidad desde 120000,true,70,true,precio
+brackets-esteticos,Brackets estéticos (inicio),90,15,1100000,desde; inicio + mensualidad desde 140000,true,80,true,precio
+alineadores,Alineadores invisibles (escaneo),60,15,250000,escaneo y estudio; tratamiento completo desde 7500000,true,90,true,precio
+endodoncia,Endodoncia,90,20,380000,desde; por conducto,true,100,true,precio
+extraccion,Extracción simple,45,15,130000,desde,true,110,true,precio
+implante,Implante dental (valoración),45,15,2800000,desde; incluye implante y corona; el total se define en valoración,true,120,true,precio
+urgencia,Urgencia odontológica,30,15,80000,desde; consulta de urgencia,false,130,true,precio

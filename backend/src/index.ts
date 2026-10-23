@@ -1,7 +1,9 @@
 import Fastify from "fastify";
 import { DateTime } from "luxon";
-import { env } from "./config/env.js";
+import { env, reportarCapacidades } from "./config/env.js";
 import { closeDb, dbOk } from "./db/client.js";
+import { arrancarDrenado, pararDrenado } from "./egress/drain.js";
+import { registrarWebhook } from "./ingress/webhook.js";
 
 const app = Fastify({
   logger: { level: env.LOG_LEVEL },
@@ -23,10 +25,15 @@ app.get("/health", async (_req, reply) => {
   });
 });
 
+registrarWebhook(app);
+
 async function main() {
   try {
     // Railway inyecta PORT. 0.0.0.0 o el contenedor no recibe tráfico.
     await app.listen({ port: env.PORT, host: "0.0.0.0" });
+    reportarCapacidades((msg) => app.log.warn(msg));
+    // Toda la salida pasa por la cola; esto es lo que la vacía.
+    arrancarDrenado((msg) => app.log.info(msg));
   } catch (err) {
     app.log.error(err);
     process.exit(1);
@@ -36,6 +43,7 @@ async function main() {
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, async () => {
     app.log.info(`${signal} recibido, cerrando`);
+    pararDrenado();
     await app.close();
     await closeDb();
     process.exit(0);

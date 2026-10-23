@@ -1,0 +1,36 @@
+# ── Secretos ────────────────────────────────────────────────
+# Nunca. Si uno llega a entrar al repo, hay que ROTARLO, no solo borrarlo.
+.env
+.env.local
+.env.*.local
+*.pem
+*.p12
+service-account*.json
+
+# ── Dependencias y build ────────────────────────────────────
+node_modules/
+dist/
+build/
+.tsbuildinfo
+
+# ── Obsidian ────────────────────────────────────────────────
+# workspace.json cambia cada vez que mueves un panel: ruido puro.
+# Los otros cuatro (app, appearance, core-plugins, graph) sí se versionan.
+knowledge/.obsidian/workspace.json
+knowledge/.obsidian/workspace-mobile.json
+knowledge/.obsidian/cache
+knowledge/.trash/
+
+# ── Artefactos de herramientas ──────────────────────────────
+graphify-out/
+.graphify*
+
+# ── SO, editores, logs ──────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
+npm-debug.log*
+.idea/
+.vscode/*
+!.vscode/extensions.json

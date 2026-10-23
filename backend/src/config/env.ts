@@ -1,3 +1,7 @@
+// Carga el .env ANTES de leer process.env. Node no lo hace solo.
+// En Railway no hay .env y no pasa nada: dotenv no pisa las variables que ya
+// existen, así que las del panel siempre ganan.
+import "dotenv/config";
 import { z } from "zod";
 
 /**
@@ -85,15 +89,47 @@ function load(): Env {
 
 export const env = load();
 
+export class EnvFaltante extends Error {
+  constructor(readonly key: string, quienLaNecesita: string) {
+    super(`falta la variable ${key}, requerida por ${quienLaNecesita}`);
+    this.name = "EnvFaltante";
+  }
+}
+
 /**
- * Para las specs siguientes: exige una variable que hoy es opcional.
- * Falla ruidosamente, nombrando la variable y quién la necesita.
+ * Exige una variable que hoy es opcional. LANZA, no mata el proceso:
+ * esto se llama en caliente, atendiendo una petición, y un `process.exit`
+ * ahí tumbaría el servidor por un chat que no se pudo responder.
+ *
+ * Para fallar al arrancar está `exigirAlArrancar()`.
  */
 export function requireEnv<K extends keyof Env>(key: K, quienLaNecesita: string): NonNullable<Env[K]> {
   const value = env[key];
   if (value === undefined || value === null || value === "") {
-    console.error(`\n✖ Falta la variable ${String(key)}, requerida por ${quienLaNecesita}.\n`);
-    process.exit(1);
+    throw new EnvFaltante(String(key), quienLaNecesita);
   }
   return value as NonNullable<Env[K]>;
+}
+
+/** `true` si la variable está puesta. Para decidir qué capacidades hay. */
+export function tieneEnv<K extends keyof Env>(key: K): boolean {
+  const v = env[key];
+  return v !== undefined && v !== null && v !== "";
+}
+
+/**
+ * Comprueba al arrancar qué capacidades están disponibles y lo dice una vez.
+ * Nada aquí es fatal: el servicio arranca igual y /health responde, para que
+ * se pueda trabajar en una spec sin tener las credenciales de las siguientes.
+ */
+export function reportarCapacidades(log: (msg: string) => void): void {
+  const capacidades: [boolean, string][] = [
+    [tieneEnv("TELEGRAM_BOT_TOKEN"), "Telegram: enviar mensajes"],
+    [tieneEnv("TELEGRAM_WEBHOOK_SECRET") && tieneEnv("TELEGRAM_WEBHOOK_PATH"), "Telegram: recibir webhooks"],
+    [tieneEnv("DEEPSEEK_API_KEY"), "DeepSeek: responder (spec 05)"],
+    [tieneEnv("GOOGLE_SA_EMAIL") && tieneEnv("GOOGLE_CALENDAR_ID"), "Google Calendar (spec 08)"],
+    [tieneEnv("INTERNAL_SECRET"), "endpoints internos para pg_cron (spec 06)"],
+  ];
+  const faltan = capacidades.filter(([ok]) => !ok).map(([, n]) => n);
+  if (faltan.length) log(`capacidades no disponibles: ${faltan.join(" · ")}`);
 }
