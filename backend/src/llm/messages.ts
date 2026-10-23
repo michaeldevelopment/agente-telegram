@@ -104,7 +104,7 @@ export async function getHistorial(
 ): Promise<MensajeLlm[]> {
   const filas = await sql<{ direction: string; body: string | null }[]>`
     select direction, body from (
-      select direction, body, created_at
+      select id, direction, body, created_at
         from messages
        where conversation_id = ${conversationId}
          and body is not null and body <> ''
