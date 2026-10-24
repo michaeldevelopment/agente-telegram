@@ -57,7 +57,7 @@ const { drenarAhora } = await import("../../src/egress/drain.js");
 
 type WorkspaceBase = {
   id: string; slug: string; name: string; timezone: string;
-  webhookSecret: null; webhookPath: null;
+  webhookSecret: null; webhookPath: null; handoffChatId: null;
 };
 type Conversacion = {
   contactId: string; conversationId: string;
@@ -134,7 +134,7 @@ async function main() {
 
   const base: WorkspaceBase = {
     id: wsRow.id, slug: wsRow.slug, name: wsRow.name, timezone: wsRow.timezone,
-    webhookSecret: null, webhookPath: null,
+    webhookSecret: null, handoffChatId: null, webhookPath: null,
   };
 
   // ════════════════════════════════════════════════════════

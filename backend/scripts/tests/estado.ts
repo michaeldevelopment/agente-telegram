@@ -73,7 +73,7 @@ async function main() {
 
   await limpiar();
 
-  const ws = { ...wsRow, webhookSecret: null, webhookPath: null, bufferMs: 500, bufferMaxMs: 60_000, bufferMaxMsgs: 50 };
+  const ws = { ...wsRow, webhookSecret: null, handoffChatId: null, webhookPath: null, bufferMs: 500, bufferMaxMs: 60_000, bufferMaxMsgs: 50 };
 
   // ════════════════════════════════════════════════════════
   // 1 · transitionState: registra el from/to correcto

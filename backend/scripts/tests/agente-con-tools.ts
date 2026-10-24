@@ -38,7 +38,7 @@ async function main() {
     insert into conversations (workspace_id, contact_id) values (${ws.id}, ${c!.id}) returning id`;
 
   const wsCtx = {
-    ...ws, webhookSecret: null, webhookPath: null,
+    ...ws, webhookSecret: null, handoffChatId: null, webhookPath: null,
     bufferMs: ws.buffer_ms, bufferMaxMs: ws.buffer_max_ms, bufferMaxMsgs: ws.buffer_max_msgs,
   };
   const conversacion = { contactId: c!.id, conversationId: conv!.id,

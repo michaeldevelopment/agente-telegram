@@ -49,7 +49,7 @@ async function main() {
 
   const contexto = {
     id: ws.id, slug: ws.slug, name: ws.name, timezone: ws.timezone,
-    webhookSecret: null, webhookPath: null,
+    webhookSecret: null, handoffChatId: null, webhookPath: null,
     bufferMs: ws.buffer_ms, bufferMaxMs: ws.buffer_max_ms, bufferMaxMsgs: ws.buffer_max_msgs,
   };
   const conversacion = {

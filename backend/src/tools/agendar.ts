@@ -4,6 +4,7 @@ import { sql } from "../db/client.js";
 import { gcalInsertarEvento } from "../gcal/events.js";
 import { computeSlots } from "../gcal/slots.js";
 import { logEvent } from "../obs/events.js";
+import { scheduleReminders } from "../reminders/schedule.js";
 import type { Tool, ToolContext } from "./types.js";
 
 /**
@@ -121,8 +122,7 @@ export const agendarCita: Tool<z.infer<typeof Args>> = {
     await sql`update appointments set gcal_event_id = ${eventId}, gcal_html_link = ${evento.htmlLink ?? null}
                where id = ${appt.id}`;
 
-    // Los recordatorios (confirm_24h / remind_2h) llegan en la spec 14.
-    // El enganche va aquí: scheduleReminders(appt.id) una vez exista.
+    await scheduleReminders(ctx.workspace, { id: appt.id, startsAt: start.toJSDate() });
 
     await logEvent({
       workspaceId: ctx.workspace.id, conversationId: ctx.conversation.conversationId,

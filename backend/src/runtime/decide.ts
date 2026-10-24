@@ -10,12 +10,15 @@
  * las llamadas y el prefijo cacheado. Si te ves tentado a añadir una
  * llamada "para decidir", para: relee ../../memoria/sin-clasificador-llm.md
  */
+import { isClinicalUrgency } from "../guardrails/urgency.js";
 
 export type Turn = {
   /** "/start" → "start". Viene normalizado desde ingress/normalize.ts. */
   command?: string;
   /** Presente si el update es un callback_query (botón pulsado). */
   callbackData?: string;
+  /** Texto libre del turno — solo para la capa 1 de guardrail (spec 15). */
+  text?: string;
 };
 
 /** Lo mínimo del estado de la conversación que decide() necesita ver. */
@@ -75,7 +78,12 @@ export function decide(turn: Turn, conv: EstadoDecision): Decision {
   if (turn.command) return { kind: "deterministic", handler: turn.command };
   if (turn.callbackData) return { kind: "deterministic", handler: "callback" };
 
-  // isClinicalUrgency() llega en la spec 15 y se engancha aquí, antes del
-  // run_agent final: también es determinista y también salta el buffer.
+  // Capa 1 de guardrail clínico (spec 15): 0 tokens, lista de términos, no
+  // un modelo. Determinista y, al devolverse ANTES del run_agent, también
+  // salta el buffer — un dolor severo no espera 12 s de silencio.
+  if (turn.text && isClinicalUrgency(turn.text)) {
+    return { kind: "deterministic", handler: "urgencia" };
+  }
+
   return { kind: "run_agent" };
 }

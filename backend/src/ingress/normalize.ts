@@ -25,7 +25,11 @@ export type Inbound = {
   startPayload?: string;  // "/start instagram" → "instagram"
   callbackData?: string;
   callbackQueryId?: string;
+  /** Solo en callbacks: el texto del mensaje con los botones (spec 13, para editarlo). */
+  callbackMessageText?: string;
   messageId?: number;
+  /** A qué mensaje responde. Es como el relay del grupo (spec 13) sabe a qué conversación va. */
+  replyToMessageId?: number;
   ts: number;             // epoch ms
   from: { firstName?: string; lastName?: string; username?: string; languageCode?: string };
   /** Salida de un chat: el usuario bloqueó el bot o lo echó del grupo. */
@@ -121,6 +125,7 @@ export function normalize(raw: unknown): Inbound | null {
       kind: "callback",
       callbackData: cq.data,
       callbackQueryId: cq.id,
+      callbackMessageText: cq.message?.text,
       text: cq.data,
       messageId: cq.message?.message_id,
       ts: Date.now(),
@@ -170,6 +175,7 @@ export function normalize(raw: unknown): Inbound | null {
     command,
     startPayload: command === "start" ? payload : undefined,
     messageId: m.message_id,
+    replyToMessageId: m.reply_to_message?.message_id,
     ts: m.date * 1000,
     from: {
       firstName: m.from?.first_name,

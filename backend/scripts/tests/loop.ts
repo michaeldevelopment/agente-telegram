@@ -70,15 +70,16 @@ async function main() {
   const [ws] = await sql<{ id: string; slug: string; name: string; timezone: string }[]>`
     select id, slug, name, timezone from workspaces limit 1`;
   if (!ws) throw new Error("no hay workspace: corre npm run seed");
-  const wsCtx = { ...ws, webhookSecret: null, webhookPath: null, bufferMs: 12000, bufferMaxMs: 75000, bufferMaxMsgs: 15 };
+  const wsCtx = { ...ws, webhookSecret: null, handoffChatId: null, webhookPath: null, bufferMs: 12000, bufferMaxMs: 75000, bufferMaxMsgs: 15 };
 
   await limpiar();
 
   // ── 1 · Orden fijo del catálogo ──────────────────────────────
   console.log("\n── Catálogo ──");
   const nombres = toolsFor("appointment_setter").map((t) => t.name);
-  comprobar("las 4 tools, en el orden declarado (agendar_cita se añadió al final en la spec 10)",
-    nombres.join(",") === "consultar_disponibilidad,consultar_mis_citas,guardar_datos_paciente,agendar_cita",
+  comprobar("las 7 tools, en el orden declarado (reprogramar/cancelar/escalar se añadieron al final en la spec 11/13)",
+    nombres.join(",") === "consultar_disponibilidad,consultar_mis_citas,guardar_datos_paciente,agendar_cita," +
+      "reprogramar_cita,cancelar_cita,escalar_a_humano",
     nombres.join(","));
 
   // ── 2 · Camino feliz: una tool call, un resultado, respuesta final ──

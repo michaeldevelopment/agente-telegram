@@ -72,3 +72,53 @@ export async function gcalInsertarEvento(opts: {
   }
   return { id: data.id!, htmlLink: data.htmlLink };
 }
+
+/**
+ * Mueve un evento existente al nuevo horario, con el MISMO id (spec 11).
+ * PATCH, nunca borrar y recrear: si no, el evento pierde su id y la
+ * idempotencia de `gcalInsertarEvento` deja de valer para esta cita.
+ */
+export async function gcalPatchEvento(opts: {
+  eventId: string;
+  start: DateTime;
+  end: DateTime;
+  timeZone: string;
+}): Promise<EventoGcal> {
+  const token = await accessToken();
+
+  const res = await fetch(url(`/events/${opts.eventId}?sendUpdates=none`), {
+    method: "PATCH",
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      start: { dateTime: opts.start.toISO(), timeZone: opts.timeZone },
+      end: { dateTime: opts.end.toISO(), timeZone: opts.timeZone },
+    }),
+  });
+
+  const data = (await res.json()) as { id?: string; htmlLink?: string; error?: { message: string } };
+  if (!res.ok) {
+    throw new Error(`Google events.patch falló (${res.status}): ${data.error?.message ?? "sin detalle"}`);
+  }
+  return { id: data.id!, htmlLink: data.htmlLink };
+}
+
+/**
+ * Borra el evento de una cita cancelada.
+ *
+ * `410 Gone` (ya borrado) y `404` (no existe) se tratan como ÉXITO: la cita
+ * ya no está en el calendario, que es exactamente lo que queríamos. No es
+ * un error, es la idempotencia funcionando del otro lado.
+ */
+export async function gcalEliminarEvento(eventId: string): Promise<void> {
+  const token = await accessToken();
+
+  const res = await fetch(url(`/events/${eventId}?sendUpdates=none`), {
+    method: "DELETE",
+    headers: { authorization: `Bearer ${token}` },
+  });
+
+  if (res.ok || res.status === 410 || res.status === 404) return;
+
+  const data = (await res.json().catch(() => ({}))) as { error?: { message: string } };
+  throw new Error(`Google events.delete falló (${res.status}): ${data.error?.message ?? "sin detalle"}`);
+}

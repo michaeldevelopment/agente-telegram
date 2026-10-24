@@ -6,8 +6,9 @@ import {
   getWorkspace, insertInboundOnConflictDoNothing, logEvent,
   marcarBloqueado, upsertContactoYConversacion, type Conversacion, type Workspace,
 } from "./persist.js";
-import { handleAyuda, handleHumano, handleStart } from "../handlers/commands.js";
+import { handleAyuda, handleHumano, handleStart, handleUrgencia } from "../handlers/commands.js";
 import { handleCallback } from "../handlers/callbacks.js";
+import { relayGrupoAPaciente, relayPacienteAGrupo } from "../handoff/relay.js";
 import { appendToBuffer } from "../runtime/buffer.js";
 import { decide } from "../runtime/decide.js";
 import { TelegramError } from "../telegram/api.js";
@@ -82,6 +83,12 @@ async function procesar(ws: Workspace, body: unknown): Promise<void> {
   const ev = normalize(body);
   if (!ev) return; // update de un tipo que no pedimos
 
+  // El grupo interno de handoff (spec 13) NO es un paciente: sus mensajes
+  // se relayan al chat correspondiente, nunca crean contacto ni conversación.
+  if (ws.handoffChatId !== null && ev.chatId === ws.handoffChatId) {
+    return await procesarMensajeDeGrupo(ws, ev);
+  }
+
   const conv = await upsertContactoYConversacion(ws, ev);
 
   // Dedupe en base de datos, no en memoria.
@@ -89,6 +96,23 @@ async function procesar(ws: Workspace, body: unknown): Promise<void> {
   if (!isNew) return;
 
   await rutear(ws, conv, ev, messageId);
+}
+
+/**
+ * Una respuesta (`reply_to_message`) a un aviso de handoff en el grupo →
+ * se reenvía al paciente. Cualquier otro mensaje del grupo (sin reply, o
+ * respondiendo a otra cosa) se ignora: este no es un canal de comandos.
+ */
+async function procesarMensajeDeGrupo(ws: Workspace, ev: Inbound): Promise<void> {
+  if (!ev.replyToMessageId || !ev.text) return;
+  try {
+    await relayGrupoAPaciente(ws, ev.replyToMessageId, ev.text, ev.userId);
+  } catch (e) {
+    await logEvent({
+      workspaceId: ws.id, type: "ingress_error", level: "error",
+      payload: { message: e instanceof Error ? e.message : String(e) },
+    }).catch(() => {});
+  }
 }
 
 async function rutear(
@@ -114,6 +138,7 @@ async function rutear(
       {
         command: ev.command,
         callbackData: ev.kind === "callback" ? ev.callbackData : undefined,
+        text: ev.kind === "callback" ? undefined : ev.text,
       },
       { isBlocked: conv.isBlocked, aiEnabled: conv.aiEnabled, state: conv.state },
     );
@@ -121,16 +146,31 @@ async function rutear(
     // El invariante: en los estados que no son ai_active (menos el turno de
     // transición que cada handler de handoff gestiona por su cuenta), la IA
     // no genera nada. Ni comandos, ni botones, ni texto libre.
-    if (decision.kind === "abstain") return;
+    if (decision.kind === "abstain") {
+      // human_active y handoff_pending (spec 13): el paciente SIGUE
+      // escribiendo, solo que ya no le contesta la IA — eso le llega al
+      // grupo, para que quien la tomó (o esté a punto de tomarla) lo vea.
+      if (decision.reason === "human_active" && ev.kind !== "callback" && ev.text?.trim()) {
+        await relayPacienteAGrupo(ws, conv, ev.text).catch((e) =>
+          logEvent({
+            workspaceId: ws.id, conversationId: conv.conversationId,
+            type: "ingress_error", level: "error",
+            payload: { message: e instanceof Error ? e.message : String(e) },
+          }).catch(() => {}),
+        );
+      }
+      return;
+    }
 
     if (decision.kind === "deterministic") {
-      if (ev.kind === "callback") return await handleCallback(ev);
+      if (ev.kind === "callback") return await handleCallback(ws, conv, ev);
       switch (decision.handler) {
-        case "start":  return await handleStart(ws, conv, ev);
+        case "start":    return await handleStart(ws, conv, ev);
         case "ayuda":
-        case "help":   return await handleAyuda(ws, conv, ev);
-        case "humano": return await handleHumano(ws, conv, ev);
-        default:       return; // comando desconocido: se ignora en silencio
+        case "help":     return await handleAyuda(ws, conv, ev);
+        case "humano":   return await handleHumano(ws, conv, ev);
+        case "urgencia": return await handleUrgencia(ws, conv, ev);
+        default:         return; // comando desconocido: se ignora en silencio
       }
     }
 

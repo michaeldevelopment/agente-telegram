@@ -4,6 +4,9 @@ import { consultarDisponibilidad } from "./disponibilidad.js";
 import { consultarMisCitas } from "./mis-citas.js";
 import { guardarDatosPaciente } from "./datos.js";
 import { agendarCita } from "./agendar.js";
+import { reprogramarCita } from "./reprogramar.js";
+import { cancelarCita } from "./cancelar.js";
+import { escalarAHumano } from "./escalar.js";
 import type { ToolAny } from "./types.js";
 
 /**
@@ -24,6 +27,9 @@ const CATALOGO: Record<string, ToolAny[]> = {
     consultarMisCitas,
     guardarDatosPaciente,
     agendarCita,
+    reprogramarCita,
+    cancelarCita,
+    escalarAHumano,
   ],
 };
 

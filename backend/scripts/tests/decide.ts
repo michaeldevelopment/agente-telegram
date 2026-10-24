@@ -69,5 +69,28 @@ const dAmbos = decide({ command: "ayuda", callbackData: "bk:x:1" }, activa);
 comprobar("si por error llegan los dos, el comando gana (orden del código)",
   dAmbos.kind === "deterministic" && dAmbos.handler === "ayuda");
 
+// ── Capa 1 de guardrail clínico (spec 15) ─────────────────────
+// Lenguaje coloquial de Cúcuta, no terminología clínica — ver CONTEXTO.md.
+for (const texto of [
+  "me duele muchísimo y me está sangrando",
+  "me está matando la muela",
+  "tengo un nacido",
+  "se me partió un diente",
+]) {
+  const d = decide({ text: texto }, activa);
+  comprobar(`urgencia coloquial escala: "${texto}"`,
+    d.kind === "deterministic" && d.handler === "urgencia", JSON.stringify(d));
+}
+
+comprobar("texto normal (sin términos de urgencia) → run_agent, NO escala",
+  decide({ text: "quiero agendar una limpieza para el jueves" }, activa).kind === "run_agent");
+
+// La urgencia es 0 tokens y determinista: al devolverse ANTES de run_agent,
+// también salta el buffer — eso lo garantiza la estructura del webhook
+// (deterministic nunca pasa por appendToBuffer), no decide() por sí solo.
+const dUrgenciaVsComando = decide({ command: "ayuda", text: "me está matando la muela" }, activa);
+comprobar("un comando sigue ganando sobre texto libre, aunque el texto sea urgente (no debería pasar en la práctica)",
+  dUrgenciaVsComando.kind === "deterministic" && dUrgenciaVsComando.handler === "ayuda");
+
 console.log(fallos === 0 ? "\n— decide: todo OK" : `\n— decide: ${fallos} fallo(s)`);
 process.exit(fallos === 0 ? 0 : 1);

@@ -98,6 +98,31 @@ export function sendChatAction(chat_id: number, action = "typing"): Promise<bool
   return call<boolean>("sendChatAction", { chat_id, action });
 }
 
+/**
+ * Edita el texto de un mensaje ya enviado (spec 13: marcar quién tomó un
+ * handoff). Puede fallar con "message to edit not found" si es muy viejo o
+ * "message is not modified" si el texto no cambió — ninguno es fatal para
+ * quien llama, que debe capturarlo y seguir.
+ */
+export function editMessageText(opts: {
+  chat_id: number;
+  message_id: number;
+  text: string;
+  parse_mode?: "HTML";
+  reply_markup?: unknown;
+}): Promise<TgMessage | boolean> {
+  return call("editMessageText", { ...opts });
+}
+
+/** Quita (o reemplaza) los botones de un mensaje, sin tocar el texto. */
+export function editMessageReplyMarkup(opts: {
+  chat_id: number;
+  message_id: number;
+  reply_markup?: unknown;
+}): Promise<TgMessage | boolean> {
+  return call("editMessageReplyMarkup", { ...opts });
+}
+
 export function getFile(file_id: string): Promise<{ file_path?: string }> {
   return call("getFile", { file_id });
 }

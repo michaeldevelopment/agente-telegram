@@ -1,5 +1,6 @@
 import { sql } from "../db/client.js";
 import { enqueue } from "../egress/outbox.js";
+import { enviarAvisoGrupo } from "../handoff/group.js";
 import { insertOutbound, type Conversacion, type Workspace } from "../ingress/persist.js";
 import type { Inbound } from "../ingress/normalize.js";
 import { transitionState } from "../runtime/state.js";
@@ -58,17 +59,40 @@ export async function handleAyuda(ws: Workspace, conv: Conversacion, ev: Inbound
 }
 
 /**
- * /humano — pausa la IA de verdad: `state = 'paused'` hace que `decide()`
- * abstenga en TODOS los turnos siguientes, sin excepción, hasta que el
- * paciente escriba /start. El aviso al grupo interno llega en la spec 13;
- * por ahora el paciente queda pausado y avisado, que es lo que esta spec
- * puede prometer sin ese canal todavía.
+ * /humano — escala de verdad (spec 13): pasa a `handoff_pending` (no
+ * `paused`) y avisa al grupo interno con botones Tomar/Devolver, igual que
+ * la tool `escalar_a_humano`. `decide()` abstiene en `handoff_pending` y
+ * `human_active` sin excepción — a diferencia de `paused`, la salida de ahí
+ * es del humano que "Devuelve", NO un /start del paciente.
  */
 export async function handleHumano(ws: Workspace, conv: Conversacion, ev: Inbound): Promise<void> {
-  await transitionState(ws, conv.conversationId, "paused", "command:/humano");
+  await transitionState(ws, conv.conversationId, "handoff_pending", "command:/humano");
+  await enviarAvisoGrupo(ws, conv, { motivo: "el paciente pidió hablar con una persona (/humano)" });
   await responder(
     ws, conv, ev.chatId,
-    `Listo, dejo de responder por ahora. Alguien del equipo de ${ws.name} va a escribirte ` +
-      `por aquí.\n\nSi quieres que vuelva a atenderte, escribe /start.`,
+    `Listo, dejo de responder por ahora. Alguien del equipo de ${ws.name} va a escribirte por aquí.`,
   );
+}
+
+/**
+ * Capa 1 de guardrail clínico (spec 15): `isClinicalUrgency()` ya disparó en
+ * `decide()`, 0 tokens. Esto es lo determinista que sigue: escala YA (sin
+ * esperar el buffer, que `decide()` ya saltó al devolver `deterministic`
+ * antes de llegar a `appendToBuffer`) y da el teléfono de la clínica.
+ *
+ * El teléfono sale de `business_info` (regla "cliente = datos, no lógica"),
+ * con el número real como último respaldo si el negocio aún no lo tiene
+ * cargado — nunca se deja sin número, es el dato más crítico del handoff.
+ */
+export async function handleUrgencia(ws: Workspace, conv: Conversacion, ev: Inbound): Promise<void> {
+  await transitionState(ws, conv.conversationId, "handoff_pending", "guardrail:urgencia_clinica");
+
+  const tel = (await telefono(ws)) ?? "+57 322 236 3192";
+  await responder(
+    ws, conv, ev.chatId,
+    `Esto suena a algo que no puede esperar. Por favor llama ya a la clínica al ${tel} ` +
+      `— ahí te atienden directo. Mientras tanto, también aviso a nuestro equipo.`,
+  );
+
+  await enviarAvisoGrupo(ws, conv, { motivo: "posible urgencia clínica detectada automáticamente" });
 }

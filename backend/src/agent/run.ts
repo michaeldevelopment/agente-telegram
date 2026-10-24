@@ -1,13 +1,18 @@
 import { sql } from "../db/client.js";
 import { enqueue } from "../egress/outbox.js";
 import { prepararTexto } from "../egress/format.js";
+import { tecladoDeSlots } from "../egress/keyboards.js";
+import { filtrarBorrador, RESPUESTA_SEGURA } from "../guardrails/output.js";
 import { MODEL, SinSaldo } from "../llm/deepseek.js";
 import {
   bloqueVolatil, buildMessages, getHistorial, getPromptEstatico, VENTANA_MENSAJES,
 } from "../llm/messages.js";
 import { logEvent, logLlmCall } from "../obs/events.js";
+import { alertarFallosLlmSeguidos, alertarGuardrail, alertarSinSaldo } from "../obs/alerts.js";
 import { runLoop } from "./loop.js";
 import type { Conversacion, Workspace } from "../ingress/persist.js";
+
+const UMBRAL_FALLOS_SEGUIDOS = 3;
 
 /**
  * Un turno del agente: cargar contexto, correr el loop de tool-calling,
@@ -80,20 +85,43 @@ export async function runAgent(
       return await degradar(ws, conv, `loop:${res.motivo}`);
     }
 
-    const texto = res.texto.trim();
+    let texto = res.texto.trim();
+
+    // Capa 3 de guardrail clínico (spec 15): filtro sobre el BORRADOR, antes
+    // de encolar. Si dispara, el borrador se DESCARTA ENTERO — no se
+    // parchea, uno parcheado puede quedar peor — y se reemplaza por la
+    // respuesta segura. Nunca se guarda el texto que lo disparó, solo su hash.
+    const hallazgo = filtrarBorrador(texto);
+    if (hallazgo) {
+      await logEvent({
+        workspaceId: ws.id, conversationId: conv.conversationId,
+        type: "guardrail", level: "warn",
+        payload: { rule: hallazgo.rule, snippetHash: hallazgo.snippetHash },
+      });
+      await alertarGuardrail(ws, hallazgo.rule); // sin umbral: cada bloqueo lo mira alguien
+      texto = RESPUESTA_SEGURA;
+    }
 
     // El saneado real (escape, troceo, limpieza de markdown) lo hace el
     // outbox; aquí solo se comprueba que quede algo que enviar.
     const trozos = prepararTexto(texto);
     if (trozos.length === 0) return await degradar(ws, conv, "no quedó texto tras sanear");
 
+    // Botones de horario (spec 12): si el turno ofreció slots reales, van
+    // pegados a este mensaje — así el paciente puede tocar en vez de escribir.
+    // Si la capa 3 reemplazó el texto, no tiene sentido ofrecer los botones
+    // de ESE borrador descartado.
+    const replyMarkup = (!hallazgo && res.teclado) ? tecladoDeSlots(res.teclado.servicio, res.teclado.slots) : undefined;
+
     await enqueue({
       workspaceId: ws.id,
       conversationId: conv.conversationId,
       chatId: Number(datos.chatId),
       texto,
+      replyMarkup,
     });
     await guardarSalida(ws, conv, texto);
+    await registrarResultadoLlm(conv.conversationId, true);
 
     return { ok: true, texto };
   } catch (e) {
@@ -103,6 +131,7 @@ export async function runAgent(
         type: "llm_error", level: "error",
         payload: { code: 402, motivo: "sin saldo", accion: "alerta al equipo" },
       });
+      await alertarSinSaldo(ws);
       return await degradar(ws, conv, "DeepSeek sin saldo");
     }
     await logEvent({
@@ -141,7 +170,31 @@ async function degradar(ws: Workspace, conv: Conversacion, motivo: string): Prom
     payload: { from: conv.state, to: "handoff_pending", reason: motivo },
   });
 
+  const fails = await registrarResultadoLlm(conv.conversationId, false);
+  if (fails >= UMBRAL_FALLOS_SEGUIDOS) {
+    await alertarFallosLlmSeguidos(ws, conv.conversationId, fails);
+    await registrarResultadoLlm(conv.conversationId, true); // reinicia el contador: ya se avisó
+  }
+
   return { ok: false, motivo };
+}
+
+/**
+ * Contador de fallos SEGUIDOS en `conversations.meta` (spec 15: alerta al
+ * grupo tras 3 fallos de LLM seguidos). `exito: true` lo resetea a 0;
+ * `exito: false` lo incrementa y devuelve el nuevo valor.
+ */
+async function registrarResultadoLlm(conversationId: string, exito: boolean): Promise<number> {
+  if (exito) {
+    await sql`update conversations set meta = meta - 'llmFails' where id = ${conversationId}`;
+    return 0;
+  }
+  const [fila] = await sql<{ fails: number }[]>`
+    update conversations
+       set meta = jsonb_set(meta, '{llmFails}', to_jsonb(coalesce((meta->>'llmFails')::int, 0) + 1))
+     where id = ${conversationId}
+    returning (meta->>'llmFails')::int as fails`;
+  return fila?.fails ?? 0;
 }
 
 async function datosDelPaciente(contactId: string) {

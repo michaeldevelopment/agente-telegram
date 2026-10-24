@@ -19,6 +19,8 @@
     "runtime-config": "tsx scripts/sync-runtime-config.ts",
     "set-commands": "tsx scripts/set-commands.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "test": "bash scripts/test-all.sh",
     "smoke:01": "bash scripts/smoke/01.sh",
     "smoke:02": "bash scripts/smoke/02.sh",
     "smoke:03": "bash scripts/smoke/03.sh",
@@ -28,7 +30,8 @@
     "smoke:07": "bash scripts/smoke/07.sh",
     "smoke:08": "bash scripts/smoke/08.sh",
     "smoke:09": "bash scripts/smoke/09.sh",
-    "smoke:10": "bash scripts/smoke/10.sh"
+    "smoke:10": "bash scripts/smoke/10.sh",
+    "prepare": "cd .. && node backend/node_modules/husky/bin.js backend/.husky"
   },
   "dependencies": {
     "dotenv": "^18.0.9",
@@ -41,9 +44,13 @@
     "zod-to-json-schema": "^3.25.2"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/luxon": "^3.4.2",
     "@types/node": "^22.10.5",
+    "eslint": "^10.13.0",
+    "husky": "^9.1.7",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.72.0"
   }
 }

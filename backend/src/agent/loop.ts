@@ -1,4 +1,5 @@
 import { callWithRetry, type MensajeLlm } from "../llm/deepseek.js";
+import type { SlotDTO } from "../gcal/slots.js";
 import { logEvent } from "../obs/events.js";
 import { toolByName, toolDefsFor } from "../tools/registry.js";
 import type { ToolContext } from "../tools/types.js";
@@ -6,8 +7,15 @@ import type { ToolContext } from "../tools/types.js";
 /** Techo anti-loop. Si se agota sin texto, NO se insiste: se escala. */
 const MAX_STEPS = 4;
 
+/** Último `consultar_disponibilidad` con resultados, para los botones (spec 12). */
+export type OfrecimientoSlots = { servicio: string; slots: SlotDTO[] };
+
 export type ResultadoLoop =
-  | { ok: true; texto: string; steps: number; uso: { hit: number; miss: number; output: number } }
+  | {
+      ok: true; texto: string; steps: number;
+      uso: { hit: number; miss: number; output: number };
+      teclado?: OfrecimientoSlots;
+    }
   | { ok: false; motivo: "overflow" | "vacio"; steps: number; uso: { hit: number; miss: number; output: number } };
 
 /**
@@ -32,6 +40,7 @@ export async function runLoop(
   const toolDefs = toolDefsFor(agentType);
 
   const usoTotal = { hit: 0, miss: 0, output: 0 };
+  let teclado: OfrecimientoSlots | undefined;
 
   for (let step = 0; step < MAX_STEPS; step++) {
     const res = await callWithRetry(mensajes, { maxTokens: opts.maxTokens, tools: toolDefs });
@@ -43,7 +52,7 @@ export async function runLoop(
     if (res.toolCalls.length === 0) {
       const texto = res.texto.trim();
       if (!texto) return { ok: false, motivo: "vacio", steps: step + 1, uso: usoTotal };
-      return { ok: true, texto, steps: step + 1, uso: usoTotal };
+      return { ok: true, texto, steps: step + 1, uso: usoTotal, teclado };
     }
 
     // PASO 1: re-anexar el assistant con sus tool_calls ANTES de los resultados.
@@ -72,6 +81,14 @@ export async function runLoop(
           } else {
             try {
               resultado = await tool.run(parsed.data, ctx);
+              // Botones (spec 12): el último ofrecimiento de horarios con
+              // resultados gana. `disponibilidad.ts` ya los limita a 4.
+              if (tool.name === "consultar_disponibilidad" && resultado.ok) {
+                const data = resultado.data as { slots?: SlotDTO[] } | undefined;
+                if (data?.slots && data.slots.length > 0) {
+                  teclado = { servicio: (parsed.data as { servicio: string }).servicio, slots: data.slots };
+                }
+              }
             } catch (e) {
               // Una excepción inesperada (DB caída, Google sin credenciales,
               // lo que sea) se convierte en un ToolResult, no en un fallo

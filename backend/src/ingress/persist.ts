@@ -8,6 +8,8 @@ export type Workspace = {
   timezone: string;
   webhookSecret: string | null;
   webhookPath: string | null;
+  /** Grupo interno de handoff (spec 13). NEGATIVO: es un chat_id de grupo. */
+  handoffChatId: number | null;
   bufferMs: number;
   bufferMaxMs: number;
   bufferMaxMsgs: number;
@@ -16,6 +18,7 @@ export type Workspace = {
 type FilaWorkspace = {
   id: string; slug: string; name: string; timezone: string;
   webhook_secret: string | null; webhook_path: string | null;
+  handoff_chat_id: string | number | null;
   buffer_ms: number; buffer_max_ms: number; buffer_max_msgs: number;
 };
 
@@ -27,6 +30,8 @@ function mapWorkspace(w: FilaWorkspace): Workspace {
     timezone: w.timezone,
     webhookSecret: w.webhook_secret,
     webhookPath: w.webhook_path,
+    // bigint: postgres.js lo devuelve como string para no perder precisión.
+    handoffChatId: w.handoff_chat_id === null ? null : Number(w.handoff_chat_id),
     bufferMs: w.buffer_ms,
     bufferMaxMs: w.buffer_max_ms,
     bufferMaxMsgs: w.buffer_max_msgs,
@@ -65,7 +70,7 @@ export async function getWorkspace(slug: string): Promise<Workspace | null> {
   if (cached && cached.hasta > Date.now()) return cached.ws;
 
   const [w] = await sql<FilaWorkspace[]>`
-    select id, slug, name, timezone, webhook_secret, webhook_path,
+    select id, slug, name, timezone, webhook_secret, webhook_path, handoff_chat_id,
            buffer_ms, buffer_max_ms, buffer_max_msgs
       from workspaces where slug = ${slug} and is_active limit 1`;
 
@@ -84,7 +89,7 @@ export async function getWorkspace(slug: string): Promise<Workspace | null> {
  */
 export async function getWorkspaceById(id: string): Promise<Workspace | null> {
   const [w] = await sql<FilaWorkspace[]>`
-    select id, slug, name, timezone, webhook_secret, webhook_path,
+    select id, slug, name, timezone, webhook_secret, webhook_path, handoff_chat_id,
            buffer_ms, buffer_max_ms, buffer_max_msgs
       from workspaces where id = ${id} and is_active limit 1`;
   return w ? mapWorkspace(w) : null;
@@ -160,16 +165,23 @@ export async function insertInboundOnConflictDoNothing(
   return row ? { isNew: true, id: row.id } : { isNew: false };
 }
 
-/** Deja constancia de lo que el bot envía. La spec 04 lo mueve al outbox. */
+/**
+ * Deja constancia de lo que el bot envía. La spec 04 lo mueve al outbox.
+ *
+ * `senderTgId` (spec 13): cuando lo que sale es la respuesta de un HUMANO
+ * relayada desde el grupo interno, no de la IA. Sirve para armar el resumen
+ * que se le inyecta a la IA cuando alguien "Devuelve" la conversación.
+ */
 export async function insertOutbound(
   ws: Workspace,
   conv: Conversacion,
   texto: string,
   tgMessageId?: number,
+  senderTgId?: number,
 ): Promise<void> {
   await sql`
-    insert into messages (workspace_id, conversation_id, direction, kind, body, tg_message_id)
-    values (${ws.id}, ${conv.conversationId}, 'out', 'text', ${texto}, ${tgMessageId ?? null})`;
+    insert into messages (workspace_id, conversation_id, direction, kind, body, tg_message_id, sender_tg_id)
+    values (${ws.id}, ${conv.conversationId}, 'out', 'text', ${texto}, ${tgMessageId ?? null}, ${senderTgId ?? null})`;
   await sql`update conversations set last_ai_at = now() where id = ${conv.conversationId}`;
 }
 
