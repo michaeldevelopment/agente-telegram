@@ -18,4 +18,14 @@ export default tseslint.config(
       "no-empty": ["error", { allowEmptyCatch: true }],
     },
   },
+  {
+    // El único .cjs del repo: el guard de `npm run prepare` (ver package.json).
+    // Corre con `node` directo, fuera del mundo ESM/TS — necesita los
+    // globals de CommonJS que `js.configs.recommended` no conoce por defecto.
+    files: ["**/*.cjs"],
+    languageOptions: {
+      globals: { require: "readonly", module: "readonly", __dirname: "readonly", process: "readonly" },
+    },
+    rules: { "@typescript-eslint/no-require-imports": "off" },
+  },
 );

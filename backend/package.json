@@ -31,7 +31,7 @@
     "smoke:08": "bash scripts/smoke/08.sh",
     "smoke:09": "bash scripts/smoke/09.sh",
     "smoke:10": "bash scripts/smoke/10.sh",
-    "prepare": "cd .. && node backend/node_modules/husky/bin.js backend/.husky"
+    "prepare": "node scripts/prepare-husky.cjs"
   },
   "dependencies": {
     "dotenv": "^18.0.9",
