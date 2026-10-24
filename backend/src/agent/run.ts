@@ -1,18 +1,18 @@
 import { sql } from "../db/client.js";
 import { enqueue } from "../egress/outbox.js";
 import { prepararTexto } from "../egress/format.js";
-import { callWithRetry, MODEL, SinSaldo } from "../llm/deepseek.js";
+import { MODEL, SinSaldo } from "../llm/deepseek.js";
 import {
   bloqueVolatil, buildMessages, getHistorial, getPromptEstatico, VENTANA_MENSAJES,
 } from "../llm/messages.js";
 import { logEvent, logLlmCall } from "../obs/events.js";
+import { runLoop } from "./loop.js";
 import type { Conversacion, Workspace } from "../ingress/persist.js";
 
 /**
- * Un turno del agente: cargar contexto, llamar al modelo, sanear, encolar.
- *
- * Todavía sin tools: solo conversa. El loop de tool-calling llega en la
- * spec 09.
+ * Un turno del agente: cargar contexto, correr el loop de tool-calling,
+ * sanear, encolar. Desde la spec 09, el agente tiene manos: puede consultar
+ * disponibilidad real, las citas del paciente, y guardar sus datos.
  */
 
 export type ResultadoTurno = { ok: true; texto: string } | { ok: false; motivo: string };
@@ -61,20 +61,26 @@ export async function runAgent(
       textoTurno,
     });
 
-    const res = await callWithRetry(mensajes);
+    const t0 = Date.now();
+    const res = await runLoop(mensajes, { workspace: ws, conversation: conv });
 
     await logLlmCall({
       workspaceId: ws.id,
       conversationId: conv.conversationId,
       model: MODEL,
-      steps: 1,
+      steps: res.steps,
       uso: res.uso,
-      latencyMs: res.latenciaMs,
-      finish: res.finish,
+      latencyMs: Date.now() - t0,
+      finish: res.ok ? "stop" : res.motivo,
     });
 
+    if (!res.ok) {
+      // 'overflow' (se agotó el techo de pasos) o 'vacio' (el modelo no dio
+      // texto): en ambos casos NO se insiste, se escala. Nunca silencio.
+      return await degradar(ws, conv, `loop:${res.motivo}`);
+    }
+
     const texto = res.texto.trim();
-    if (!texto) return await degradar(ws, conv, "el modelo devolvió vacío");
 
     // El saneado real (escape, troceo, limpieza de markdown) lo hace el
     // outbox; aquí solo se comprueba que quede algo que enviar.

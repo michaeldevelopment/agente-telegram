@@ -26,9 +26,23 @@ export function deepseek(): OpenAI {
  */
 export const MODEL = env.DEEPSEEK_MODEL;
 
+/** Una tool call tal como la devuelve el modelo. `arguments` es un STRING JSON. */
+export type ToolCallLlm = {
+  id: string;
+  type: "function";
+  function: { name: string; arguments: string };
+};
+
 export type MensajeLlm =
-  | { role: "system" | "user" | "assistant"; content: string }
+  | { role: "system" | "user"; content: string }
+  | { role: "assistant"; content: string | null; tool_calls?: ToolCallLlm[] }
   | { role: "tool"; tool_call_id: string; content: string };
+
+/** Definición de una tool en el formato que espera la API (function calling). */
+export type ToolDefLlm = {
+  type: "function";
+  function: { name: string; description: string; parameters: unknown };
+};
 
 export type UsoDeepSeek = {
   prompt_tokens?: number;
@@ -39,6 +53,14 @@ export type UsoDeepSeek = {
 
 export type RespuestaLlm = {
   texto: string;
+  /** Vacío si el modelo respondió con texto en vez de llamar a una tool. */
+  toolCalls: ToolCallLlm[];
+  /**
+   * El mensaje `assistant` TAL CUAL lo devolvió el modelo, listo para
+   * re-anexar al historial antes de los resultados de las tools. Omitirlo
+   * rompe el contexto y el modelo repite la llamada (ver agent/loop.ts).
+   */
+  mensajeAssistant: MensajeLlm;
   uso: { hit: number; miss: number; output: number };
   latenciaMs: number;
   finish: string | null;
@@ -62,7 +84,15 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  */
 export async function callWithRetry(
   messages: MensajeLlm[],
-  opts: { maxTokens?: number; temperature?: number; intentos?: number } = {},
+  opts: {
+    maxTokens?: number; temperature?: number; intentos?: number;
+    /**
+     * ⚠️ El orden de este array entra en el PREFIJO CACHEADO. Reordenarlo
+     * rompe el cache de todos los clientes a la vez: fíjalo en
+     * tools/registry.ts, nunca lo construyas iterando un objeto.
+     */
+    tools?: ToolDefLlm[];
+  } = {},
 ): Promise<RespuestaLlm> {
   const intentos = opts.intentos ?? 3;
   let ultimo: unknown;
@@ -81,13 +111,22 @@ export async function callWithRetry(
         temperature: opts.temperature ?? 0.3,
         // Techo de seguridad: el default sin thinking es 8K.
         max_tokens: opts.maxTokens ?? 400,
+        ...(opts.tools?.length ? { tools: opts.tools, tool_choice: "auto" as const } : {}),
       } as never);
 
       const u = (res.usage ?? {}) as UsoDeepSeek;
       const eleccion = res.choices?.[0];
+      const msg = eleccion?.message;
+      const toolCalls = (msg?.tool_calls ?? []) as ToolCallLlm[];
 
       return {
-        texto: eleccion?.message?.content ?? "",
+        texto: msg?.content ?? "",
+        toolCalls,
+        mensajeAssistant: {
+          role: "assistant",
+          content: msg?.content ?? null,
+          ...(toolCalls.length ? { tool_calls: toolCalls } : {}),
+        },
         uso: {
           hit: u.prompt_cache_hit_tokens ?? 0,
           miss: u.prompt_cache_miss_tokens ?? u.prompt_tokens ?? 0,

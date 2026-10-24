@@ -4,10 +4,12 @@ import { env, EnvFaltante } from "../config/env.js";
 import { normalize, type Inbound } from "./normalize.js";
 import {
   getWorkspace, insertInboundOnConflictDoNothing, logEvent,
-  marcarBloqueado, upsertContactoYConversacion, type Workspace,
+  marcarBloqueado, upsertContactoYConversacion, type Conversacion, type Workspace,
 } from "./persist.js";
-import { handleAyuda, handleStart } from "../handlers/start.js";
+import { handleAyuda, handleHumano, handleStart } from "../handlers/commands.js";
+import { handleCallback } from "../handlers/callbacks.js";
 import { appendToBuffer } from "../runtime/buffer.js";
+import { decide } from "../runtime/decide.js";
 import { TelegramError } from "../telegram/api.js";
 
 /** Comparación en tiempo constante. Longitudes distintas = no coincide. */
@@ -91,12 +93,13 @@ async function procesar(ws: Workspace, body: unknown): Promise<void> {
 
 async function rutear(
   ws: Workspace,
-  conv: Awaited<ReturnType<typeof upsertContactoYConversacion>>,
+  conv: Conversacion,
   ev: Inbound,
   messageId: string | undefined,
 ): Promise<void> {
   try {
-    // El usuario bloqueó el bot (o lo desbloqueó).
+    // El usuario bloqueó el bot (o lo desbloqueó). Esto es un evento de
+    // sistema, no un turno: no pasa por decide().
     if (ev.kind === "system" && ev.bloqueado !== undefined) {
       await marcarBloqueado(ws, ev.chatId, ev.bloqueado);
       await logEvent({
@@ -106,20 +109,33 @@ async function rutear(
       return;
     }
 
-    // Contra un chat bloqueado no se envía nada.
-    if (conv.isBlocked) return;
+    // El motor de decisión: 0 tokens, antes de gastar nada. Ver runtime/decide.ts
+    const decision = decide(
+      {
+        command: ev.command,
+        callbackData: ev.kind === "callback" ? ev.callbackData : undefined,
+      },
+      { isBlocked: conv.isBlocked, aiEnabled: conv.aiEnabled, state: conv.state },
+    );
 
-    // Comandos: deterministas, SIN LLM y SIN pasar por el buffer. El motor
-    // de decisión formal llega en la spec 07; esto ya cumple la regla 6
-    // ("botones, comandos y urgencias saltan el buffer") para comandos.
-    switch (ev.command) {
-      case "start": return await handleStart(ws, conv, ev);
-      case "ayuda":
-      case "help":  return await handleAyuda(ws, conv, ev);
+    // El invariante: en los estados que no son ai_active (menos el turno de
+    // transición que cada handler de handoff gestiona por su cuenta), la IA
+    // no genera nada. Ni comandos, ni botones, ni texto libre.
+    if (decision.kind === "abstain") return;
+
+    if (decision.kind === "deterministic") {
+      if (ev.kind === "callback") return await handleCallback(ev);
+      switch (decision.handler) {
+        case "start":  return await handleStart(ws, conv, ev);
+        case "ayuda":
+        case "help":   return await handleAyuda(ws, conv, ev);
+        case "humano": return await handleHumano(ws, conv, ev);
+        default:       return; // comando desconocido: se ignora en silencio
+      }
     }
 
-    if (ev.kind === "callback") return; // los botones, en la spec 12
-    if (!ev.text?.trim()) return;       // foto o sticker sin texto, por ahora
+    // decision.kind === "run_agent": solo llega texto libre.
+    if (!ev.text?.trim()) return; // foto o sticker sin texto, por ahora
 
     if (!messageId) {
       // No debería pasar: isNew=true siempre trae id. Defensivo nada más.

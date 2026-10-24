@@ -17,21 +17,28 @@
     "webhook:gen": "tsx scripts/set-webhook.ts --generate",
     "webhook:info": "tsx scripts/set-webhook.ts --info",
     "runtime-config": "tsx scripts/sync-runtime-config.ts",
+    "set-commands": "tsx scripts/set-commands.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "smoke:01": "bash scripts/smoke/01.sh",
     "smoke:02": "bash scripts/smoke/02.sh",
     "smoke:03": "bash scripts/smoke/03.sh",
     "smoke:04": "bash scripts/smoke/04.sh",
     "smoke:05": "bash scripts/smoke/05.sh",
-    "smoke:06": "bash scripts/smoke/06.sh"
+    "smoke:06": "bash scripts/smoke/06.sh",
+    "smoke:07": "bash scripts/smoke/07.sh",
+    "smoke:08": "bash scripts/smoke/08.sh",
+    "smoke:09": "bash scripts/smoke/09.sh",
+    "smoke:10": "bash scripts/smoke/10.sh"
   },
   "dependencies": {
     "dotenv": "^18.0.9",
     "fastify": "^5.2.1",
+    "google-auth-library": "^10.9.1",
     "luxon": "^3.5.0",
     "openai": "^7.43.0",
     "postgres": "^3.4.5",
-    "zod": "^3.24.1"
+    "zod": "^3.24.1",
+    "zod-to-json-schema": "^3.25.2"
   },
   "devDependencies": {
     "@types/luxon": "^3.4.2",

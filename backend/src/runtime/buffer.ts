@@ -3,6 +3,8 @@ import { runAgent } from "../agent/run.js";
 import { getWorkspaceById, type Conversacion, type Workspace } from "../ingress/persist.js";
 import { logEvent } from "../obs/events.js";
 import { iniciarTyping } from "../telegram/typing.js";
+import { decide } from "./decide.js";
+import { getEstadoConversacion } from "./state.js";
 
 /**
  * El buffer por silencio. Diferenciador del producto: cuatro mensajes
@@ -169,12 +171,31 @@ async function procesarLoteReclamado(
 
   if (!mergedText) return; // lote de solo mensajes vacíos (stickers, etc.)
 
+  // Lectura FRESCA del estado, no la de cuando entró el primer mensaje: entre
+  // el primer mensaje del lote y este cierre pueden pasar hasta 75 s (el
+  // techo absoluto del buffer), y en ese rato pudo llegar un /humano. Correr
+  // decide() aquí es lo que cierra esa ventana de carrera — sin esto, un
+  // paciente que pide hablar con alguien a mitad de una ráfaga de mensajes
+  // seguiría recibiendo respuestas del agente hasta el próximo turno.
+  const estado = await getEstadoConversacion(conversationId);
+  if (!estado) throw new Error(`conversación ${conversationId} no encontrada`);
+
+  const decision = decide({}, estado);
+  if (decision.kind !== "run_agent") {
+    await logEvent({
+      workspaceId: ws.id, conversationId,
+      type: "agent_skipped",
+      payload: { reason: decision.kind === "abstain" ? decision.reason : decision.kind },
+    });
+    return;
+  }
+
   const conv: Conversacion = {
     contactId: batch.contact_id,
     conversationId,
-    isBlocked: false,
-    state: "ai_active",
-    aiEnabled: true,
+    isBlocked: estado.isBlocked,
+    state: estado.state,
+    aiEnabled: estado.aiEnabled,
   };
 
   await runAgent(ws, conv, mergedText, { excluirUltimos: batch.msg_count });

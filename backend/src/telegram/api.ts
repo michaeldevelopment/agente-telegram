@@ -106,6 +106,13 @@ export function getMe(): Promise<{ id: number; username?: string; first_name: st
   return call("getMe");
 }
 
+/** El menú "/" del cliente de Telegram. Ver scripts/set-commands.ts. */
+export function setMyCommands(
+  commands: { command: string; description: string }[],
+): Promise<boolean> {
+  return call<boolean>("setMyCommands", { commands });
+}
+
 export function setWebhook(opts: {
   url: string;
   secret_token: string;
